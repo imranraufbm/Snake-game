@@ -1,294 +1,433 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>3D Snake</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Snake 3D</title>
 
 <style>
 
-*{
-margin:0;
-padding:0;
-box-sizing:border-box;
-font-family:Arial,Helvetica,sans-serif;
-}
-
 body{
-height:100vh;
-display:flex;
-align-items:center;
-justify-content:center;
-background:linear-gradient(135deg,#0f2027,#203a43,#2c5364);
-overflow:hidden;
-}
-
-.wrapper{
-width:min(92vmin,600px);
-aspect-ratio:1;
+margin:0;
+background:#0a0f1a;
+font-family:Arial;
 display:flex;
 flex-direction:column;
-gap:12px;
+align-items:center;
+height:100vh;
 }
 
-.header{
+#game{
+width:100%;
+max-width:700px;
+flex:1;
+}
+
+canvas{
+width:100%;
+height:100%;
+display:block;
+}
+
+#panel{
+width:100%;
+max-width:700px;
+padding:10px;
 display:flex;
-justify-content:space-between;
+flex-direction:column;
+gap:10px;
+}
+
+#score{
 color:white;
+text-align:center;
 font-size:18px;
 }
 
-.board{
-flex:1;
-display:grid;
-grid-template-columns:repeat(20,1fr);
-grid-template-rows:repeat(20,1fr);
-background:rgba(0,0,0,0.35);
-backdrop-filter:blur(10px);
-border-radius:16px;
-padding:6px;
-box-shadow:
-0 25px 60px rgba(0,0,0,0.6),
-inset 0 0 20px rgba(255,255,255,0.05);
+#speeds{
+display:flex;
+gap:10px;
+justify-content:center;
 }
 
-.cell{
-border-radius:6px;
-}
-
-.snake{
-background:linear-gradient(145deg,#00ff9c,#00c96f);
-box-shadow:
-0 0 10px #00ff9c,
-inset 0 0 6px rgba(255,255,255,0.6);
+#speeds button{
+padding:8px 14px;
+border:none;
 border-radius:8px;
-animation:snakePulse .6s infinite alternate;
+background:#00ffc6;
 }
 
-@keyframes snakePulse{
-from{transform:scale(.95)}
-to{transform:scale(1)}
-}
-
-.food{
-background:radial-gradient(circle,#ff4d6d,#b00020);
+#joy{
+width:140px;
+height:140px;
 border-radius:50%;
-animation:foodBounce 1s infinite;
-box-shadow:0 0 12px #ff4d6d;
+background:#111827;
+position:relative;
+margin:auto;
+touch-action:none;
 }
 
-@keyframes foodBounce{
-0%{transform:scale(.9)}
-50%{transform:scale(1.2)}
-100%{transform:scale(.9)}
-}
-
-.overlay{
+#stick{
+width:50px;
+height:50px;
+background:#00ffc6;
+border-radius:50%;
 position:absolute;
+left:45px;
+top:45px;
+}
+
+.screen{
+position:fixed;
 inset:0;
+background:rgba(0,0,0,.7);
 display:flex;
 align-items:center;
 justify-content:center;
 flex-direction:column;
-gap:20px;
-background:rgba(0,0,0,0.5);
 color:white;
-font-size:28px;
-border-radius:20px;
+font-size:26px;
+gap:20px;
 }
 
-button{
-padding:12px 22px;
+.screen button{
+padding:12px 20px;
+font-size:18px;
 border:none;
 border-radius:10px;
-background:#00ff9c;
-font-size:16px;
-cursor:pointer;
-}
-
-.touch{
-display:grid;
-grid-template-columns:repeat(3,60px);
-gap:10px;
-justify-content:center;
-margin-top:6px;
-}
-
-.touch button{
-width:60px;
-height:60px;
-font-size:20px;
+background:#00ffc6;
 }
 
 </style>
 </head>
+
 <body>
 
-<div class="wrapper">
+<div id="game"></div>
 
-<div class="header">
-<div>Score: <span id="score">0</span></div>
-<div>Best: <span id="best">0</span></div>
+<div id="panel">
+
+<div id="score">Score 0</div>
+
+<div id="speeds">
+<button data-s="0.22">Slow</button>
+<button data-s="0.16">Normal</button>
+<button data-s="0.10">Fast</button>
 </div>
 
-<div class="board" id="board"></div>
-
-<div class="touch">
-<div></div>
-<button data-dir="up">▲</button>
-<div></div>
-<button data-dir="left">◀</button>
-<button data-dir="down">▼</button>
-<button data-dir="right">▶</button>
+<div id="joy">
+<div id="stick"></div>
 </div>
 
 </div>
 
-<div class="overlay" id="overlay">
-<div>3D Snake</div>
-<button onclick="startGame()">Start Game</button>
+<div id="start" class="screen">
+<div>Snake 3D</div>
+<button id="play">Start</button>
 </div>
+
+<div id="over" class="screen" style="display:none">
+<div>Game Over</div>
+<button id="again">Play Again</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 
 <script>
 
-const board = document.getElementById("board")
-const scoreEl = document.getElementById("score")
-const bestEl = document.getElementById("best")
-const overlay = document.getElementById("overlay")
+let container=document.getElementById("game")
 
-let grid = 20
-let snake
-let food
-let dir
-let score
-let speed = 110
-let loop
+let scene=new THREE.Scene()
 
-let best = localStorage.getItem("snakeBest") || 0
-bestEl.textContent = best
+let camera=new THREE.PerspectiveCamera(
+60,
+container.clientWidth/container.clientHeight,
+0.1,
+1000
+)
 
-function startGame(){
+camera.position.set(0,22,0)
+camera.lookAt(0,0,0)
 
-snake = [{x:10,y:10}]
-dir = {x:1,y:0}
-score = 0
+let renderer=new THREE.WebGLRenderer({antialias:true})
+renderer.setSize(container.clientWidth,container.clientHeight)
+container.appendChild(renderer.domElement)
 
-spawnFood()
+scene.add(new THREE.AmbientLight(0x555555))
 
-overlay.style.display="none"
+let light=new THREE.DirectionalLight(0xffffff,1)
+light.position.set(10,20,10)
+scene.add(light)
 
-clearInterval(loop)
-loop = setInterval(update,speed)
+let floor=new THREE.Mesh(
+new THREE.PlaneGeometry(26,26),
+new THREE.MeshStandardMaterial({color:0x111827})
+)
+
+floor.rotation.x=-Math.PI/2
+scene.add(floor)
+
+scene.add(new THREE.GridHelper(26,26,0x00ffc6,0x003333))
+
+let loader=new THREE.TextureLoader()
+
+let snakeMat=new THREE.MeshStandardMaterial({
+map:loader.load("https://threejs.org/examples/textures/uv_grid_opengl.jpg")
+})
+
+let snake=[]
+let dir={x:1,z:0}
+
+let bodyGeo=new THREE.SphereGeometry(.45,20,20)
+
+function headModel(){
+
+let g=new THREE.SphereGeometry(.6,24,24)
+let m=new THREE.MeshStandardMaterial({color:0x00ffc6})
+
+let head=new THREE.Mesh(g,m)
+
+let eyeGeo=new THREE.SphereGeometry(.08)
+
+let eye1=new THREE.Mesh(eyeGeo,new THREE.MeshBasicMaterial({color:0}))
+let eye2=new THREE.Mesh(eyeGeo,new THREE.MeshBasicMaterial({color:0}))
+
+eye1.position.set(.2,.2,.45)
+eye2.position.set(-.2,.2,.45)
+
+head.add(eye1)
+head.add(eye2)
+
+let tongue=new THREE.Mesh(
+new THREE.BoxGeometry(.05,.02,.6),
+new THREE.MeshBasicMaterial({color:0xff0000})
+)
+
+tongue.position.set(0,0,.7)
+head.add(tongue)
+
+head.userData.tongue=tongue
+
+return head
+
+}
+
+function addHead(){
+
+let h=headModel()
+h.position.set(0,.45,0)
+scene.add(h)
+snake.push(h)
+
+}
+
+function addBody(x,z){
+
+let s=new THREE.Mesh(bodyGeo,snakeMat)
+s.position.set(x,.45,z)
+scene.add(s)
+snake.push(s)
 
 }
 
 function spawnFood(){
 
-food = {
-x: Math.floor(Math.random()*grid),
-y: Math.floor(Math.random()*grid)
-}
+let types=[
+{color:0xff2e2e,grow:1},
+{color:0xffdd33,grow:2},
+{color:0x00d4ff,grow:3}
+]
+
+let t=types[Math.floor(Math.random()*types.length)]
+
+let f=new THREE.Mesh(
+new THREE.SphereGeometry(.4,16,16),
+new THREE.MeshStandardMaterial({color:t.color,emissive:t.color})
+)
+
+f.userData.grow=t.grow
+
+f.position.set(
+Math.floor(Math.random()*16)-8,
+.6,
+Math.floor(Math.random()*16)-8
+)
+
+scene.add(f)
+foods.push(f)
 
 }
 
-function update(){
+let foods=[]
 
-const head = {
-x: snake[0].x + dir.x,
-y: snake[0].y + dir.y
+let score=0
+let speed=0.16
+let timer=0
+
+let eatSound=new Audio("https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg")
+let overSound=new Audio("https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg")
+
+function startGame(){
+
+snake.forEach(s=>scene.remove(s))
+foods.forEach(f=>scene.remove(f))
+
+snake=[]
+foods=[]
+
+addHead()
+
+for(let i=0;i<3;i++) spawnFood()
+
+score=0
+document.getElementById("score").innerText="Score 0"
+
+document.getElementById("start").style.display="none"
+document.getElementById("over").style.display="none"
+
 }
 
-if(
-head.x<0 ||
-head.y<0 ||
-head.x>=grid ||
-head.y>=grid ||
-snake.some(s=>s.x===head.x && s.y===head.y)
-){
+function move(){
+
+let head=snake[0]
+
+let nx=Math.round(head.position.x+dir.x)
+let nz=Math.round(head.position.z+dir.z)
+
+if(nx>12||nx<-12||nz>12||nz<-12){
 gameOver()
 return
 }
 
-snake.unshift(head)
+for(let s of snake){
+if(s!==head && s.position.x===nx && s.position.z===nz){
+gameOver()
+return
+}
+}
 
-if(head.x===food.x && head.y===food.y){
+let seg=new THREE.Mesh(bodyGeo,snakeMat)
+seg.position.set(nx,.45,nz)
+scene.add(seg)
+snake.splice(1,0,seg)
 
-score++
-scoreEl.textContent=score
+head.position.set(nx,.45,nz)
+
+let ate=null
+
+foods.forEach(f=>{
+if(Math.round(f.position.x)===nx && Math.round(f.position.z)===nz) ate=f
+})
+
+if(ate){
+
+eatSound.currentTime=0
+eatSound.play()
+
+score+=ate.userData.grow
+
+document.getElementById("score").innerText="Score "+score
+
+foods=foods.filter(a=>a!==ate)
+scene.remove(ate)
+
+for(let i=0;i<ate.userData.grow;i++){
+snake.push(seg.clone())
+}
+
 spawnFood()
 
 }else{
-snake.pop()
-}
 
-draw()
+let tail=snake.pop()
+scene.remove(tail)
 
-}
-
-function draw(){
-
-board.innerHTML=""
-
-for(let y=0;y<grid;y++){
-for(let x=0;x<grid;x++){
-
-const cell=document.createElement("div")
-cell.className="cell"
-
-if(snake.some(s=>s.x===x && s.y===y)){
-cell.classList.add("snake")
-}
-
-if(food.x===x && food.y===y){
-cell.classList.add("food")
-}
-
-board.appendChild(cell)
-
-}
 }
 
 }
 
 function gameOver(){
 
-clearInterval(loop)
-
-if(score>best){
-best=score
-localStorage.setItem("snakeBest",best)
-bestEl.textContent=best
-}
-
-overlay.style.display="flex"
-overlay.innerHTML=`
-<div>Game Over</div>
-<div>Score ${score}</div>
-<button onclick="startGame()">Play Again</button>
-`
+overSound.play()
+document.getElementById("over").style.display="flex"
 
 }
 
-window.addEventListener("keydown",e=>{
+function animate(){
 
-if(e.key==="ArrowUp" && dir.y!==1) dir={x:0,y:-1}
-if(e.key==="ArrowDown" && dir.y!==-1) dir={x:0,y:1}
-if(e.key==="ArrowLeft" && dir.x!==1) dir={x:-1,y:0}
-if(e.key==="ArrowRight" && dir.x!==-1) dir={x:1,y:0}
+requestAnimationFrame(animate)
+
+timer+=0.01
+
+if(timer>speed){
+move()
+timer=0
+}
+
+let head=snake[0]
+
+if(head && head.userData.tongue){
+
+head.userData.tongue.scale.z=1+Math.sin(Date.now()*0.02)*.3
+
+}
+
+foods.forEach(f=>{
+f.rotation.y+=.05
+f.position.y=.6+Math.sin(Date.now()*0.004)*.15
+})
+
+renderer.render(scene,camera)
+
+}
+
+animate()
+
+addEventListener("keydown",e=>{
+
+if(e.key==="ArrowUp" && dir.z!==1) dir={x:0,z:-1}
+if(e.key==="ArrowDown" && dir.z!==-1) dir={x:0,z:1}
+if(e.key==="ArrowLeft" && dir.x!==1) dir={x:-1,z:0}
+if(e.key==="ArrowRight" && dir.x!==-1) dir={x:1,z:0}
 
 })
 
-document.querySelectorAll(".touch button").forEach(b=>{
+document.getElementById("play").onclick=startGame
+document.getElementById("again").onclick=startGame
+
+document.querySelectorAll("#speeds button").forEach(b=>{
 b.onclick=()=>{
-
-const d=b.dataset.dir
-
-if(d==="up" && dir.y!==1) dir={x:0,y:-1}
-if(d==="down" && dir.y!==-1) dir={x:0,y:1}
-if(d==="left" && dir.x!==1) dir={x:-1,y:0}
-if(d==="right" && dir.x!==-1) dir={x:1,y:0}
-
+speed=parseFloat(b.dataset.s)
 }
+})
+
+let joy=document.getElementById("joy")
+let stick=document.getElementById("stick")
+
+joy.addEventListener("touchmove",e=>{
+
+let r=joy.getBoundingClientRect()
+
+let x=e.touches[0].clientX-r.left-70
+let y=e.touches[0].clientY-r.top-70
+
+if(Math.abs(x)>Math.abs(y)){
+if(x>0) dir={x:1,z:0}
+else dir={x:-1,z:0}
+}else{
+if(y>0) dir={x:0,z:1}
+else dir={x:0,z:-1}
+}
+
+})
+
+addEventListener("resize",()=>{
+
+camera.aspect=container.clientWidth/container.clientHeight
+camera.updateProjectionMatrix()
+
+renderer.setSize(container.clientWidth,container.clientHeight)
+
 })
 
 </script>
